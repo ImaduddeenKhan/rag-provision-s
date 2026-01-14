@@ -87,4 +87,7 @@ def chat():
     return jsonify({"answer": response.content})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Railway provides a 'PORT' environment variable automatically
+    port = int(os.environ.get("PORT", 5000))
+    # host='0.0.0.0' is required for cloud deployment
+    app.run(host='0.0.0.0', port=port)
