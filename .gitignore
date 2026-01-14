@@ -1,0 +1,7 @@
+venv/
+ragpro/
+__pycache__/
+*.log
+.env
+temp_pdfs/
+chroma_db/

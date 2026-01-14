@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provision AI | Document Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #5d5fef;
+            --bg-gradient: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+            --glass: rgba(255, 255, 255, 0.7);
+            --text-main: #1a1a2e;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+
+        body {
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: var(--text-main);
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 900px;
+            height: 85vh;
+            background: var(--glass);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        /* Header Area */
+        .header {
+            padding: 20px 30px;
+            background: rgba(255, 255, 255, 0.4);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 { font-size: 1.2rem; font-weight: 600; color: var(--primary); }
+
+        /* Sidebar/Upload Section */
+        .upload-bar {
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #pdf-files {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        /* Chat Window */
+        #chat-box {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            scrollbar-width: thin;
+        }
+
+        /* Chat Bubbles */
+        .msg {
+            max-width: 75%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            position: relative;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .user-msg {
+            align-self: flex-end;
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .ai-msg {
+            align-self: flex-start;
+            background: white;
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            white-space: pre-line; /* Keeps your line-by-line formatting */
+        }
+
+        /* Input Area */
+        .input-area {
+            padding: 20px 30px;
+            display: flex;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 14px 20px;
+            border-radius: 14px;
+            border: 1px solid rgba(0,0,0,0.1);
+            outline: none;
+            transition: 0.3s;
+        }
+
+        input[type="text"]:focus { border-color: var(--primary); background: white; }
+
+        button {
+            padding: 10px 24px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        
+        #status { font-size: 0.8rem; color: #555; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header">
+        <h1>Provision AI</h1>
+        <div id="status">Ready</div>
+    </div>
+
+    <div class="upload-bar">
+        <input type="file" id="pdf-files" multiple>
+        <button onclick="uploadFiles()">Process PDFs</button>
+    </div>
+
+    <div id="chat-box">
+        <div class="msg ai-msg">Hello! Please upload your USA State Provision files to get started.</div>
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="user-input" placeholder="Ask about rules and regulations...">
+        <button onclick="sendMessage()">Ask</button>
+    </div>
+</div>
+
+<script>
+    async function uploadFiles() {
+        const fileInput = document.getElementById('pdf-files');
+        const status = document.getElementById('status');
+        if (fileInput.files.length === 0) return alert("Select files first!");
+
+        const formData = new FormData();
+        for (let file of fileInput.files) { formData.append('pdfs', file); }
+        
+        status.innerText = "⏳ Processing documents...";
+        try {
+            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            status.innerText = "✅ " + data.message;
+        } catch (e) {
+            status.innerText = "❌ Error uploading.";
+        }
+    }
+
+    async function sendMessage() {
+        const inputField = document.getElementById('user-input');
+        const query = inputField.value;
+        if (!query) return;
+
+        const chatBox = document.getElementById('chat-box');
+        
+        // Add User Message
+        chatBox.innerHTML += `<div class="msg user-msg">${query}</div>`;
+        inputField.value = "";
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            const res = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query })
+            });
+            const data = await res.json();
+            
+            // Add AI Message
+            chatBox.innerHTML += `<div class="msg ai-msg">${data.answer}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        } catch (e) {
+            chatBox.innerHTML += `<div class="msg ai-msg">Error: Could not connect to the model.</div>`;
+        }
+    }
+
+    // Allow 'Enter' key to send message
+    document.getElementById('user-input').addEventListener("keypress", (e) => {
+        if (e.key === "Enter") sendMessage();
+    });
+</script>
+
+</body>
+</html>
