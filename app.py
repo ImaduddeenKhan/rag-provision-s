@@ -67,13 +67,18 @@ def chat():
         cleaned_context += f"Chunk {i+1}:\n{clean_text}\n\n"
 
     # 3. Create the prompt with ONLY the cleaned text
+ 
     system_prompt = (
-        "You are a Provision file AI assistant. Answer using ONLY the provided context.\n"
-        "These files are provision files for different USA states. Answer accurately.\n"
-        "If the answer is not in the context, say 'I do not have this information.'\n\n"
-        "CONTEXT:\n{context}"
-    )
-
+    "You are an expert legal assistant specializing in USA State Provision files. "
+    "Your goal is to provide a direct and concise answer to the user's question based ONLY on the context below.\n\n"
+    "Rules for your response:\n"
+    "1. Analyze the context to find the specific rule that matches the user's query.\n"
+    "2. If the context specifies different rules for different conditions (like width or length), mention those clearly but briefly.\n"
+    "3. Do not use phrases like 'Based on the provided context.'\n"
+    "4. Format the output line by line for readability.\n"
+    "5. If the answer is missing, say 'I do not have this information.'\n\n"
+    "CONTEXT:\n{context}"
+)
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
         ("human", "{input}"),
