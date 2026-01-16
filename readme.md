@@ -1,3 +1,44 @@
+[ START APPLICATION ]
+                 |
+        ( Initialize Models )
+    - Gemini-2.5-Flash (LLM)
+    - Text-Embedding-004 (Embeddings)
+                 |
+                 V
++---------------------------------------+       +---------------------------------------+
+|        ROUTE: /upload (POST)          |       |          ROUTE: /chat (POST)          |
++---------------------------------------+       +---------------------------------------+
+| 1. Receive PDF files                  |       | 1. Receive User Query                 |
+| 2. Save to 'temp_pdfs'                |       | 2. Check: retrievers initialized?     |
+| 3. Load PDFs (PyPDFLoader)            |       |           |                           |
+| 4. Split Text (600/150 overlap)       |       |           V                           |
+| 5. Generate Vector Embeddings         |       | 3. [ HYBRID SEARCH EXECUTION ]        |
+| 6. Save to ChromaDB (Vector Store)    |       |    /---------------------------\      |
+| 7. Create BM25 Index (Local Keyword)  |       |    |   Vector   |     BM25      |      |
+|                                       |       |    | Search (k=2)| Search (k=2) |      |
+|          [ INDEX READY ]              |       |    \-------------+--------------/      |
++---------------------------------------+       |           |                           |
+                 |                              |    ( Ensemble & Re-ranking )          |
+                 |                              |           |                           |
+                 |                              |           V                           |
+                 |                              | 4. Merge Unique Top Documents         |
+                 |                              | 5. Clean & Format Context Text        |
+                 |                              | 6. Inject into System Prompt          |
+                 |                              | 7. Call Gemini-2.5-Flash (One Call)   |
+                 |                              |           |                           |
+                 |                              |           V                           |
+                 |                              | 8. Return JSON Answer to User         |
+                 +----------------------------->+---------------------------------------+
+                                        |
+                                [ LOGGING & DEBUG ]
+                       (rag_debug.log / Stream Handler)
+
+code updated 16 jan 2026.. "applied hybrid search(vector search + BM25 words matching)"
+
+
+
+
+
 1. The Project Process (Simplified)
 The process is divided into two main phases: Ingestion (preparing the data) and Inference (answering the question).
 

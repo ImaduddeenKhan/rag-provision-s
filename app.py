@@ -7,7 +7,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+# New Imports for Hybrid Search
+from langchain_community.retrievers import BM25Retriever
+from langchain_classic.retrievers import EnsembleRetriever
 
 # --- LOGGING SETUP ---
 logging.basicConfig(
@@ -31,7 +33,9 @@ embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash") 
 logger.info("Models initialized successfully")
 
+# Global variables for retrievers
 vectorstore = None
+bm25_retriever = None
 
 @app.route('/')
 def index():
@@ -40,7 +44,7 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
-    global vectorstore
+    global vectorstore, bm25_retriever
     logger.info("Upload request received")
     files = request.files.getlist('pdfs')
     logger.info(f"Found {len(files)} files to process")
@@ -56,7 +60,7 @@ def upload_files():
         logger.info(f"Loaded {len(docs)} pages from {file.filename}")
     
     logger.info(f"Starting chunking: {len(all_docs)} total pages")
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=150)
     final_chunks = text_splitter.split_documents(all_docs)
     logger.info(f"Created {len(final_chunks)} chunks")
     
@@ -66,32 +70,44 @@ def upload_files():
         embedding=embeddings,
         persist_directory="./chroma_db"
     )
-    logger.info("Vectorstore created successfully")
+
+    # --- NEW: Initialize BM25 Retriever locally ---
+    logger.info("Initializing BM25 Keyword Retriever")
+    bm25_retriever = BM25Retriever.from_documents(final_chunks)
+    bm25_retriever.k = 2 # Retrieve top 2 keyword matches
     
-    return jsonify({"status": "Success", "message": f"Processed {len(files)} files."})
+    logger.info("Hybrid indexing completed successfully")
+    
+    return jsonify({"status": "Success", "message": f"Processed {len(files)} files and built Hybrid Search index."})
 
 @app.route('/chat', methods=['POST'])
 def chat():
     user_query = request.json.get('query')
     logger.info(f"Chat request received: '{user_query[:100]}...'")
     
-    if not vectorstore:
-        logger.error("No vectorstore available - upload documents first")
+    if not vectorstore or not bm25_retriever:
+        logger.error("Retrievers not ready - upload documents first")
         return jsonify({"error": "Please upload PDFs first!"})
     
     try:
+        # --- NEW: Ensemble Retrieval (Vector + BM25) ---
+        logger.info("Performing Hybrid Search (Ensemble)")
+        chroma_retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
         
-        logger.info("Retrieving top 3 documents")
-        docs = vectorstore.similarity_search(user_query, k=3)
-        logger.info(f"Retrieved {len(docs)} documents")
+        # Combining both: 50% weight to Vector, 50% to BM25
+        ensemble_retriever = EnsembleRetriever(
+            retrievers=[bm25_retriever, chroma_retriever], 
+            weights=[0.5, 0.5]
+        )
         
-       
+        docs = ensemble_retriever.invoke(user_query)
+        logger.info(f"Retrieved {len(docs)} unique documents from hybrid search")
+        
         logger.info("Cleaning document context")
         cleaned_context = ""
         for i, doc in enumerate(docs):
             clean_text = " ".join(doc.page_content.split())
             cleaned_context += f"Chunk {i+1}:\n{clean_text}\n\n"
-        logger.info(f"Cleaned context length: {len(cleaned_context)} characters")
         
         logger.info("Creating prompt template")
         system_prompt = (
@@ -110,20 +126,16 @@ def chat():
             ("human", "{input}"),
         ])
         
-        logger.info("Formatting final prompt")
         formatted_prompt = prompt.format(context=cleaned_context, input=user_query)
-        logger.info(f"Final prompt length: {len(formatted_prompt)} characters")
         
         logger.info("Calling LLM for response generation")
         response = llm.invoke(formatted_prompt)
         logger.info("LLM response received successfully")
-        logger.info(f"Response preview: {response.content[:200]}...")
         
         return jsonify({"answer": response.content})
     
     except Exception as e:
-        logger.error(f"Error in chat processing: {str(e)}")
-        logger.error(f"Full traceback:", exc_info=True)
+        logger.error(f"Error in chat processing: {str(e)}", exc_info=True)
         return jsonify({"answer": f"Error: {str(e)}"})
 
 if __name__ == '__main__':
